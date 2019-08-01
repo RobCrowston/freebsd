@@ -58,9 +58,11 @@ __FBSDID("$FreeBSD$");
 
 #include "bcm2835_dma.h"
 #include <arm/broadcom/bcm2835/bcm2835_mbox_prop.h>
+//#include <arm/broadcom/bcm2835/bcm2835_clkman.h>
 #include "bcm2835_vcbus.h"
 
 #define	BCM2835_DEFAULT_SDHCI_FREQ	50
+#define	BCM2838_DEFAULT_SDHCI_FREQ	100
 
 #define	BCM_SDHCI_BUFFER_SIZE		512
 #define	NUM_DMA_SEGS			2
@@ -84,10 +86,39 @@ SYSCTL_INT(_hw_sdhci, OID_AUTO, bcm2835_sdhci_debug, CTLFLAG_RWTUN,
 static int bcm2835_sdhci_hs = 1;
 static int bcm2835_sdhci_pio_mode = 0;
 
+struct bcm_mmc_conf {
+	int	clock_id;
+	int	clock_src;
+	u_int	default_freq;
+	int	power_id;
+	u_int	quirks;
+};
+
+struct bcm_mmc_conf bcm2835_sdhci_conf = {
+	.clock_id	= BCM2835_MBOX_CLOCK_ID_EMMC,
+	.clock_src	= -1,
+	.default_freq	= BCM2835_DEFAULT_SDHCI_FREQ,
+	.power_id	= BCM2835_MBOX_POWER_ID_EMMC,
+	.quirks		= SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK 
+			    | SDHCI_QUIRK_BROKEN_TIMEOUT_VAL
+			    | SDHCI_QUIRK_DONT_SET_HISPD_BIT
+			    | SDHCI_QUIRK_MISSING_CAPS
+};
+
+struct bcm_mmc_conf bcm2838_emmc2_conf = {
+	.clock_id	= BCM2838_MBOX_CLOCK_ID_EMMC2,
+	.clock_src	= -1, //BCM_EMMC2_CLKSRC,
+	.default_freq	= BCM2838_DEFAULT_SDHCI_FREQ,
+	.power_id	= BCM2838_MBOX_POWER_ID_EMMC2,
+	.quirks		= 0
+};
+
 static struct ofw_compat_data compat_data[] = {
-	{"broadcom,bcm2835-sdhci",	1},
-	{"brcm,bcm2835-sdhci",		1},
-	{"brcm,bcm2835-mmc",		1},
+	{"broadcom,bcm2835-sdhci",	(uintptr_t)&bcm2835_sdhci_conf},
+	{"brcm,bcm2835-sdhci",		(uintptr_t)&bcm2835_sdhci_conf},
+	{"brcm,bcm2835-mmc",		(uintptr_t)&bcm2835_sdhci_conf},
+	{"brcm,bcm2711-emmc2",		(uintptr_t)&bcm2838_emmc2_conf},
+	{"brcm,bcm2838-emmc2",		(uintptr_t)&bcm2838_emmc2_conf},
 	{NULL,				0}
 };
 
@@ -115,6 +146,8 @@ struct bcm_sdhci_softc {
 	uint32_t		blksz_and_count;
 	uint32_t		cmd_and_mode;
 	bool			need_update_blk;
+	device_t		clkman;
+	struct bcm_mmc_conf *	conf;
 };
 
 static int bcm_sdhci_probe(device_t);
@@ -168,8 +201,12 @@ bcm_sdhci_attach(device_t dev)
 	sc->sc_dev = dev;
 	sc->sc_req = NULL;
 
-	err = bcm2835_mbox_set_power_state(BCM2835_MBOX_POWER_ID_EMMC,
-	    TRUE);
+	sc->conf = (struct bcm_mmc_conf *)ofw_bus_search_compatible(dev,
+	    compat_data)->ocd_data;
+	if (sc->conf == 0)
+	    return (ENXIO);
+
+	err = bcm2835_mbox_set_power_state(sc->conf->power_id, TRUE);
 	if (err != 0) {
 		if (bootverbose)
 			device_printf(dev, "Unable to enable the power\n");
@@ -177,8 +214,7 @@ bcm_sdhci_attach(device_t dev)
 	}
 
 	default_freq = 0;
-	err = bcm2835_mbox_get_clock_rate(BCM2835_MBOX_CLOCK_ID_EMMC,
-	    &default_freq);
+	err = bcm2835_mbox_get_clock_rate(sc->conf->clock_id, &default_freq);
 	if (err == 0) {
 		/* Convert to MHz */
 		default_freq /= 1000000;
@@ -190,10 +226,26 @@ bcm_sdhci_attach(device_t dev)
 			default_freq = cell / 1000000;
 	}
 	if (default_freq == 0)
-		default_freq = BCM2835_DEFAULT_SDHCI_FREQ;
+		default_freq = sc->conf->default_freq;
 
 	if (bootverbose)
 		device_printf(dev, "SDHCI frequency: %dMHz\n", default_freq);
+
+	/*if (sc->conf->clock_src > 0) {
+		uint32_t f;
+		sc->clkman = devclass_get_device(devclass_find("bcm2835_clkman"), 0);
+		if (sc->clkman == NULL) {
+			device_printf(dev, "cannot find Clock Manager\n");
+			return (ENXIO);
+		}
+
+		f = bcm2835_clkman_set_frequency(sc->clkman, sc->conf->clock_src, default_freq);
+		if (f == 0)
+			return (EINVAL);
+		
+		if (bootverbose)
+			device_printf(dev, "Clock source frequency: %dMHz\n", f);
+	}*/
 
 	rid = 0;
 	sc->sc_mem_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY, &rid,
@@ -230,10 +282,7 @@ bcm_sdhci_attach(device_t dev)
 	if (bcm2835_sdhci_hs)
 		sc->sc_slot.caps |= SDHCI_CAN_DO_HISPD;
 	sc->sc_slot.caps |= (default_freq << SDHCI_CLOCK_BASE_SHIFT);
-	sc->sc_slot.quirks = SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK 
-		| SDHCI_QUIRK_BROKEN_TIMEOUT_VAL
-		| SDHCI_QUIRK_DONT_SET_HISPD_BIT
-		| SDHCI_QUIRK_MISSING_CAPS;
+	sc->sc_slot.quirks = sc->conf->quirks;
  
 	sdhci_init_slot(dev, &sc->sc_slot, 0);
 
@@ -744,6 +793,7 @@ static driver_t bcm_sdhci_driver = {
 
 DRIVER_MODULE(sdhci_bcm, simplebus, bcm_sdhci_driver, bcm_sdhci_devclass,
     NULL, NULL);
+//MODULE_DEPEND(sdhci_bcm, bcm2835_clkman, 1, 1, 1);
 SDHCI_DEPEND(sdhci_bcm);
 #ifndef MMCCAM
 MMC_DECLARE_BRIDGE(sdhci_bcm);
