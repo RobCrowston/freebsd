@@ -109,7 +109,7 @@ struct bcm_mmc_conf bcm2838_emmc2_conf = {
 	.clock_id	= BCM2838_MBOX_CLOCK_ID_EMMC2,
 	.clock_src	= -1, //BCM_EMMC2_CLKSRC,
 	.default_freq	= BCM2838_DEFAULT_SDHCI_FREQ,
-	.power_id	= BCM2838_MBOX_POWER_ID_EMMC2,
+	.power_id	= BCM2835_MBOX_POWER_ID_EMMC,
 	.quirks		= 0
 };
 
