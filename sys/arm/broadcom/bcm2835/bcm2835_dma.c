@@ -715,7 +715,7 @@ bcm_dma_attach(device_t dev)
 			continue;
 
 		sc->sc_irq[rid] = bus_alloc_resource_any(dev, SYS_RES_IRQ, &rid,
-						       RF_ACTIVE);
+						       RF_ACTIVE | RF_SHAREABLE );
 		if (sc->sc_irq[rid] == NULL) {
 			device_printf(dev, "cannot allocate interrupt\n");
 			err = ENXIO;
