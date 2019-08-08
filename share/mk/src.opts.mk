@@ -162,7 +162,6 @@ __DEFAULT_YES_OPTIONS = \
     QUOTAS \
     RADIUS_SUPPORT \
     RBOOTD \
-    REPRODUCIBLE_BUILD \
     RESCUE \
     ROUTED \
     SENDMAIL \
@@ -208,6 +207,7 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_VERIEXEC_PASS_MANIFEST \
     OFED_EXTRA \
     OPENLDAP \
+    REPRODUCIBLE_BUILD \
     RPCBIND_WARMSTART_SUPPORT \
     SHARED_TOOLCHAIN \
     SORT_THREADS \
@@ -269,7 +269,7 @@ __LLVM_TARGETS= \
 		powerpc \
 		sparc \
 		x86
-__LLVM_TARGET_FILT=	C/(amd64|i386)/x86/:S/sparc64/sparc/:S/arm64/aarch64/
+__LLVM_TARGET_FILT=	C/(amd64|i386)/x86/:S/sparc64/sparc/:S/arm64/aarch64/:S/powerpc64/powerpc/
 .for __llt in ${__LLVM_TARGETS}
 # Default the given TARGET's LLVM_TARGET support to the value of MK_CLANG.
 .if ${__TT:${__LLVM_TARGET_FILT}} == ${__llt}
@@ -389,8 +389,8 @@ BROKEN_OPTIONS+=MLX5TOOL
 BROKEN_OPTIONS+=HYPERV
 .endif
 
-# NVME is only x86 and powerpc64
-.if ${__T} != "amd64" && ${__T} != "i386" && ${__T} != "powerpc64"
+# NVME is only aarch64, x86 and powerpc64
+.if ${__T} != "aarch64" && ${__T} != "amd64" && ${__T} != "i386" && ${__T} != "powerpc64"
 BROKEN_OPTIONS+=NVME
 .endif
 

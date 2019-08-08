@@ -3281,6 +3281,8 @@ mlx5e_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 				    "tso6 disabled due to -txcsum6.\n");
 			}
 		}
+		if (mask & IFCAP_NOMAP)
+			ifp->if_capenable ^= IFCAP_NOMAP;
 		if (mask & IFCAP_RXCSUM)
 			ifp->if_capenable ^= IFCAP_RXCSUM;
 		if (mask & IFCAP_RXCSUM_IPV6)
@@ -4068,6 +4070,50 @@ mlx5e_snd_tag_query(struct m_snd_tag *pmt, union if_snd_tag_query_params *params
 	}
 }
 
+#ifdef RATELIMIT
+#define NUM_HDWR_RATES_MLX 13
+static const uint64_t adapter_rates_mlx[NUM_HDWR_RATES_MLX] = {
+	135375,			/* 1,083,000 */
+	180500,			/* 1,444,000 */
+	270750,			/* 2,166,000 */
+	361000,			/* 2,888,000 */
+	541500,			/* 4,332,000 */
+	721875,			/* 5,775,000 */
+	1082875,		/* 8,663,000 */
+	1443875,		/* 11,551,000 */
+	2165750,		/* 17,326,000 */
+	2887750,		/* 23,102,000 */
+	4331625,		/* 34,653,000 */
+	5775500,		/* 46,204,000 */
+	8663125			/* 69,305,000 */
+};
+
+static void
+mlx5e_ratelimit_query(struct ifnet *ifp __unused, struct if_ratelimit_query_results *q)
+{
+	/*
+	 * This function needs updating by the driver maintainer!
+	 * For the MLX card there are currently (ConectX-4?) 13 
+	 * pre-set rates and others i.e. ConnectX-5, 6, 7??
+	 *
+	 * This will change based on later adapters
+	 * and this code should be updated to look at ifp
+	 * and figure out the specific adapter type
+	 * settings i.e. how many rates as well
+	 * as if they are fixed (as is shown here) or
+	 * if they are dynamic (example chelsio t4). Also if there
+	 * is a maximum number of flows that the adapter
+	 * can handle that too needs to be updated in
+	 * the max_flows field.
+	 */
+	q->rate_table = adapter_rates_mlx;
+	q->flags = RT_IS_FIXED_TABLE;
+	q->max_flows = 0;	/* mlx has no limit */
+	q->number_of_rates = NUM_HDWR_RATES_MLX;
+	q->min_segment_burst = 1;
+}
+#endif
+
 static void
 mlx5e_snd_tag_free(struct m_snd_tag *pmt)
 {
@@ -4147,12 +4193,15 @@ mlx5e_create_ifp(struct mlx5_core_dev *mdev)
 	ifp->if_capabilities |= IFCAP_LRO;
 	ifp->if_capabilities |= IFCAP_TSO | IFCAP_VLAN_HWTSO;
 	ifp->if_capabilities |= IFCAP_HWSTATS | IFCAP_HWRXTSTMP;
+	ifp->if_capabilities |= IFCAP_NOMAP;
 	ifp->if_capabilities |= IFCAP_TXRTLMT;
 	ifp->if_snd_tag_alloc = mlx5e_snd_tag_alloc;
 	ifp->if_snd_tag_free = mlx5e_snd_tag_free;
 	ifp->if_snd_tag_modify = mlx5e_snd_tag_modify;
 	ifp->if_snd_tag_query = mlx5e_snd_tag_query;
-
+#ifdef RATELIMIT
+	ifp->if_ratelimit_query = mlx5e_ratelimit_query;
+#endif
 	/* set TSO limits so that we don't have to drop TX packets */
 	ifp->if_hw_tsomax = MLX5E_MAX_TX_PAYLOAD_SIZE - (ETHER_HDR_LEN + ETHER_VLAN_ENCAP_LEN);
 	ifp->if_hw_tsomaxsegcount = MLX5E_MAX_TX_MBUF_FRAGS - 1 /* hdr */;

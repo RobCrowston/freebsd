@@ -57,6 +57,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/kernel.h>
 #include <sys/ktr.h>
 #include <sys/ktrace.h>
+#include <sys/limits.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
@@ -3433,7 +3434,7 @@ corefile_open_last(struct thread *td, char *name, int indexpos,
  */
 static int
 corefile_open(const char *comm, uid_t uid, pid_t pid, struct thread *td,
-    int compress, struct vnode **vpp, char **namep)
+    int compress, int signum, struct vnode **vpp, char **namep)
 {
 	struct sbuf sb;
 	struct nameidata nd;
@@ -3481,6 +3482,9 @@ corefile_open(const char *comm, uid_t uid, pid_t pid, struct thread *td,
 				break;
 			case 'P':	/* process id */
 				sbuf_printf(&sb, "%u", pid);
+				break;
+			case 'S':	/* signal number */
+				sbuf_printf(&sb, "%i", signum);
 				break;
 			case 'U':	/* user id */
 				sbuf_printf(&sb, "%u", uid);
@@ -3599,7 +3603,7 @@ coredump(struct thread *td)
 	PROC_UNLOCK(p);
 
 	error = corefile_open(p->p_comm, cred->cr_uid, p->p_pid, td,
-	    compress_user_cores, &vp, &name);
+	    compress_user_cores, p->p_sig, &vp, &name);
 	if (error != 0)
 		return (error);
 

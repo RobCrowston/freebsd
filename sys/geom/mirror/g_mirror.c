@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysctl.h>
 
 #include <geom/geom.h>
+#include <geom/geom_dbg.h>
 #include <geom/mirror/g_mirror.h>
 
 FEATURE(geom_mirror, "GEOM mirroring support");
@@ -3291,6 +3292,7 @@ g_mirror_taste(struct g_class *mp, struct g_provider *pp, int flags __unused)
 	sx_xlock(&sc->sc_lock);
 	sc->sc_flags |= G_MIRROR_DEVICE_FLAG_TASTING;
 	error = g_mirror_add_disk(sc, pp, &md);
+	sc->sc_flags &= ~G_MIRROR_DEVICE_FLAG_TASTING;
 	if (error != 0) {
 		G_MIRROR_DEBUG(0, "Cannot add disk %s to %s (error=%d).",
 		    pp->name, gp->name, error);
@@ -3302,7 +3304,6 @@ g_mirror_taste(struct g_class *mp, struct g_provider *pp, int flags __unused)
 		}
 		gp = NULL;
 	}
-	sc->sc_flags &= ~G_MIRROR_DEVICE_FLAG_TASTING;
 	if ((sc->sc_flags & G_MIRROR_DEVICE_FLAG_DESTROY) != 0) {
 		g_mirror_destroy(sc, G_MIRROR_DESTROY_HARD);
 		g_topology_lock();

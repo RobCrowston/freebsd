@@ -2,8 +2,6 @@
 
 .include <src.opts.mk>
 
-PACKAGE=runtime-manuals
-
 MAN=	accept_filter.9 \
 	accf_data.9 \
 	accf_dns.9 \
@@ -291,6 +289,7 @@ MAN=	accept_filter.9 \
 	securelevel_gt.9 \
 	selrecord.9 \
 	sema.9 \
+	seqc.9 \
 	sf_buf.9 \
 	sglist.9 \
 	shm_map.9 \
@@ -381,7 +380,6 @@ MAN=	accept_filter.9 \
 	vm_page_aflag.9 \
 	vm_page_free.9 \
 	vm_page_grab.9 \
-	vm_page_hold.9 \
 	vm_page_insert.9 \
 	vm_page_lookup.9 \
 	vm_page_rename.9 \
@@ -400,6 +398,7 @@ MAN=	accept_filter.9 \
 	VOP_ATTRIB.9 \
 	VOP_BMAP.9 \
 	VOP_BWRITE.9 \
+	VOP_COPY_FILE_RANGE.9 \
 	VOP_CREATE.9 \
 	VOP_FSYNC.9 \
 	VOP_GETACL.9 \
@@ -945,6 +944,15 @@ MLINKS+=drbr.9 drbr_free.9 \
 MLINKS+=DRIVER_MODULE.9 DRIVER_MODULE_ORDERED.9 \
 	DRIVER_MODULE.9 EARLY_DRIVER_MODULE.9 \
 	DRIVER_MODULE.9 EARLY_DRIVER_MODULE_ORDERED.9
+MLINKS+=epoch.9 epoch_context.9 \
+	epoch.9 epoch_alloc.9 \
+	epoch.9 epoch_free.9 \
+	epoch.9 epoch_enter.9 \
+	epoch.9 epoch_exit.9 \
+	epoch.9 epoch_wait.9 \
+	epoch.9 epoch_call.9 \
+	epoch.9 epoch_drain_callbacks.9 \
+	epoch.9 in_epoch.9
 MLINKS+=EVENTHANDLER.9 EVENTHANDLER_DECLARE.9 \
 	EVENTHANDLER.9 EVENTHANDLER_DEFINE.9 \
 	EVENTHANDLER.9 EVENTHANDLER_DEREGISTER.9 \
@@ -996,6 +1004,7 @@ MLINKS+=g_bio.9 g_alloc_bio.9 \
 	g_bio.9 g_clone_bio.9 \
 	g_bio.9 g_destroy_bio.9 \
 	g_bio.9 g_duplicate_bio.9 \
+	g_bio.9 g_format_bio.9 \
 	g_bio.9 g_new_bio.9 \
 	g_bio.9 g_print_bio.9 \
 	g_bio.9 g_reset_bio.9
@@ -1781,6 +1790,7 @@ MLINKS+=sbuf.9 sbuf_bcat.9 \
 	sbuf.9 sbuf_new.9 \
 	sbuf.9 sbuf_new_auto.9 \
 	sbuf.9 sbuf_new_for_sysctl.9 \
+	sbuf.9 sbuf_nl_terminate.9 \
 	sbuf.9 sbuf_printf.9 \
 	sbuf.9 sbuf_printf_drain.9 \
 	sbuf.9 sbuf_putbuf.9 \
@@ -1818,6 +1828,10 @@ MLINKS+=sema.9 sema_destroy.9 \
 	sema.9 sema_trywait.9 \
 	sema.9 sema_value.9 \
 	sema.9 sema_wait.9
+MLINKS+=seqc.9 seqc_consistent.9 \
+	seqc.9 seqc_read.9 \
+	seqc.9 seqc_write_begin.9 \
+	seqc.9 seqc_write_end.9
 MLINKS+=sf_buf.9 sf_buf_alloc.9 \
 	sf_buf.9 sf_buf_free.9 \
 	sf_buf.9 sf_buf_kva.9 \
@@ -1825,6 +1839,8 @@ MLINKS+=sf_buf.9 sf_buf_alloc.9 \
 MLINKS+=sglist.9 sglist_alloc.9 \
 	sglist.9 sglist_append.9 \
 	sglist.9 sglist_append_bio.9 \
+	sglist.9 sglist_append_ext_pgs.9 \
+	sglist.9 sglist_append_mb_ext_pgs.9 \
 	sglist.9 sglist_append_mbuf.9 \
 	sglist.9 sglist_append_phys.9 \
 	sglist.9 sglist_append_sglist.9 \
@@ -1835,6 +1851,8 @@ MLINKS+=sglist.9 sglist_alloc.9 \
 	sglist.9 sglist_clone.9 \
 	sglist.9 sglist_consume_uio.9 \
 	sglist.9 sglist_count.9 \
+	sglist.9 sglist_count_ext_pgs.9 \
+	sglist.9 sglist_count_mb_ext_pgs.9 \
 	sglist.9 sglist_count_vmpages.9 \
 	sglist.9 sglist_free.9 \
 	sglist.9 sglist_hold.9 \
@@ -2235,7 +2253,6 @@ MLINKS+=vm_page_aflag.9 vm_page_aflag_clear.9 \
 MLINKS+=vm_page_free.9 vm_page_free_toq.9 \
 	vm_page_free.9 vm_page_free_zero.9 \
 	vm_page_free.9 vm_page_try_to_free.9
-MLINKS+=vm_page_hold.9 vm_page_unhold.9
 MLINKS+=vm_page_insert.9 vm_page_remove.9
 MLINKS+=vm_page_wire.9 vm_page_unwire.9
 MLINKS+=VOP_ACCESS.9 VOP_ACCESSX.9

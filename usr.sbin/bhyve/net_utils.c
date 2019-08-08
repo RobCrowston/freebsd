@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2011 NetApp, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,17 +23,21 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-#include "net_utils.h"
-#include "bhyverun.h"
-#include <md5.h>
+#include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
+
+#include <sys/types.h>
 #include <net/ethernet.h>
-#include <string.h>
-#include <stdio.h>
+
 #include <errno.h>
+#include <md5.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "bhyverun.h"
+#include "net_utils.h"
 
 int
 net_parsemac(char *mac_str, uint8_t *mac_addr)

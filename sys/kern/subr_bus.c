@@ -3971,7 +3971,6 @@ bus_helper_reset_prepare(device_t dev, int flags)
 	return (0);
 }
 
-
 /**
  * @brief Helper function for implementing BUS_PRINT_CHILD().
  *
@@ -5922,8 +5921,9 @@ devctl2_init(void)
  */
 static int obsolete_panic = 0;
 SYSCTL_INT(_debug, OID_AUTO, obsolete_panic, CTLFLAG_RWTUN, &obsolete_panic, 0,
-    "Bus debug level");
-/* 0 - don't panic, 1 - panic if already obsolete, 2 - panic if deprecated */
+    "Panic when obsolete features are used (0 = never, 1 = if osbolete, "
+    "2 = if deprecated)");
+
 static void
 gone_panic(int major, int running, const char *msg)
 {

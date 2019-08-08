@@ -3580,10 +3580,10 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 	iflib_txq_t txq = r->cookie;
 	if_ctx_t ctx = txq->ift_ctx;
 	if_t ifp = ctx->ifc_ifp;
-	struct mbuf **mp, *m;
-	int i, count, consumed, pkt_sent, bytes_sent, mcast_sent, avail;
-	int reclaimed, err, in_use_prev, desc_used;
-	bool do_prefetch, ring, rang;
+	struct mbuf *m, **mp;
+	int avail, bytes_sent, consumed, count, err, i, in_use_prev;
+	int mcast_sent, pkt_sent, reclaimed, txq_avail;
+	bool do_prefetch, rang, ring;
 
 	if (__predict_false(!(if_getdrvflags(ifp) & IFF_DRV_RUNNING) ||
 			    !LINK_ACTIVE(ctx))) {
@@ -3621,16 +3621,15 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 		       avail, ctx->ifc_flags, TXQ_AVAIL(txq));
 #endif
 	do_prefetch = (ctx->ifc_flags & IFC_PREFETCH);
-	avail = TXQ_AVAIL(txq);
+	txq_avail = TXQ_AVAIL(txq);
 	err = 0;
-	for (desc_used = i = 0; i < count && avail > MAX_TX_DESC(ctx) + 2; i++) {
+	for (i = 0; i < count && txq_avail > MAX_TX_DESC(ctx) + 2; i++) {
 		int rem = do_prefetch ? count - i : 0;
 
 		mp = _ring_peek_one(r, cidx, i, rem);
 		MPASS(mp != NULL && *mp != NULL);
 		if (__predict_false(*mp == (struct mbuf *)txq)) {
 			consumed++;
-			reclaimed++;
 			continue;
 		}
 		in_use_prev = txq->ift_in_use;
@@ -3649,10 +3648,9 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 		DBG_COUNTER_INC(tx_sent);
 		bytes_sent += m->m_pkthdr.len;
 		mcast_sent += !!(m->m_flags & M_MCAST);
-		avail = TXQ_AVAIL(txq);
+		txq_avail = TXQ_AVAIL(txq);
 
 		txq->ift_db_pending += (txq->ift_in_use - in_use_prev);
-		desc_used += (txq->ift_in_use - in_use_prev);
 		ETHER_BPF_MTAP(ifp, m);
 		if (__predict_false(!(ifp->if_drv_flags & IFF_DRV_RUNNING)))
 			break;
@@ -4733,7 +4731,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 			    err);
 			goto fail_queues;
 		}
-	} else {
+	} else if (scctx->isc_intr != IFLIB_INTR_MSIX) {
 		rid = 0;
 		if (scctx->isc_intr == IFLIB_INTR_MSI) {
 			MPASS(msix == 1);
@@ -4743,6 +4741,11 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 			device_printf(dev, "iflib_legacy_setup failed %d\n", err);
 			goto fail_queues;
 		}
+	} else {
+		device_printf(dev,
+		    "Cannot use iflib with only 1 MSI-X interrupt!\n");
+		err = ENODEV;
+		goto fail_intr_free;
 	}
 
 	ether_ifattach(ctx->ifc_ifp, ctx->ifc_mac.octet);
@@ -4783,10 +4786,12 @@ fail_intr_free:
 fail_queues:
 	iflib_tx_structures_free(ctx);
 	iflib_rx_structures_free(ctx);
+	taskqgroup_detach(qgroup_if_config_tqg, &ctx->ifc_admin_task);
 	IFDI_DETACH(ctx);
 fail_unlock:
 	CTX_UNLOCK(ctx);
 fail_ctx_free:
+	device_set_softc(ctx->ifc_dev, NULL);
         if (ctx->ifc_flags & IFC_SC_ALLOCATED)
                 free(ctx->ifc_softc, M_IFLIB);
         free(ctx, M_IFLIB);
@@ -5343,7 +5348,6 @@ iflib_register(if_ctx_t ctx)
 	 */
 	kobj_init((kobj_t) ctx, (kobj_class_t) driver);
 	kobj_class_compile((kobj_class_t) driver);
-	driver->refs++;
 
 	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
 	if_setsoftc(ifp, ctx);
@@ -6154,9 +6158,6 @@ iflib_tx_credits_update(if_ctx_t ctx, iflib_txq_t txq)
 #ifdef INVARIANTS
 	int credits_pre = txq->ift_cidx_processed;
 #endif
-
-	if (ctx->isc_txd_credits_update == NULL)
-		return (0);
 
 	bus_dmamap_sync(txq->ift_ifdi->idi_tag, txq->ift_ifdi->idi_map,
 	    BUS_DMASYNC_POSTREAD);

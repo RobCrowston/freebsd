@@ -303,6 +303,7 @@ struct thread {
 	void		*td_su;		/* (k) FFS SU private */
 	sbintime_t	td_sleeptimo;	/* (t) Sleep timeout. */
 	int		td_rtcgen;	/* (s) rtc_generation of abs. sleep */
+	int		td_errno;	/* (k) Error from last syscall. */
 	size_t		td_vslock_sz;	/* (k) amount of vslock-ed space */
 	struct kcov_info *td_kcov_info;	/* (*) Kernel code coverage data */
 #define	td_endzero td_sigmask
@@ -353,8 +354,6 @@ struct thread {
 	struct kaudit_record	*td_ar;	/* (k) Active audit record, if any. */
 	struct lpohead	td_lprof[2];	/* (a) lock profiling objects. */
 	struct kdtrace_thread	*td_dtrace; /* (*) DTrace-specific data. */
-	int		td_errno;	/* Error returned by last syscall. */
-	/* LP64 hole */
 	struct vnet	*td_vnet;	/* (k) Effective vnet. */
 	const char	*td_vnet_lpush;	/* (k) Debugging vnet push / pop. */
 	struct trapframe *td_intr_frame;/* (k) Frame of the current irq */
@@ -761,6 +760,8 @@ struct proc {
 #define	P2_ASLR_ENABLE	0x00000040	/* Force enable ASLR. */
 #define	P2_ASLR_DISABLE	0x00000080	/* Force disable ASLR. */
 #define	P2_ASLR_IGNSTART 0x00000100	/* Enable ASLR to consume sbrk area. */
+#define	P2_PROTMAX_ENABLE 0x00000200	/* Force enable implied PROT_MAX. */
+#define	P2_PROTMAX_DISABLE 0x00000400	/* Force disable implied PROT_MAX. */
 
 /* Flags protected by proctree_lock, kept in p_treeflags. */
 #define	P_TREE_ORPHANED		0x00000001	/* Reparented, on orphan list */
@@ -1068,11 +1069,13 @@ void	proc_linkup(struct proc *p, struct thread *td);
 struct proc *proc_realparent(struct proc *child);
 void	proc_reap(struct thread *td, struct proc *p, int *status, int options);
 void	proc_reparent(struct proc *child, struct proc *newparent, bool set_oppid);
+void	proc_add_orphan(struct proc *child, struct proc *parent);
 void	proc_set_traced(struct proc *p, bool stop);
 void	proc_wkilled(struct proc *p);
 struct	pstats *pstats_alloc(void);
 void	pstats_fork(struct pstats *src, struct pstats *dst);
 void	pstats_free(struct pstats *ps);
+void	proc_clear_orphan(struct proc *p);
 void	reaper_abandon_children(struct proc *p, bool exiting);
 int	securelevel_ge(struct ucred *cr, int level);
 int	securelevel_gt(struct ucred *cr, int level);

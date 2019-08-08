@@ -639,7 +639,7 @@ interpret:
 		free(imgp->freepath, M_TEMP);
 		imgp->freepath = NULL;
 		/* set new name to that of the interpreter */
-		NDINIT(&nd, LOOKUP, LOCKLEAF | FOLLOW | SAVENAME,
+		NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME,
 		    UIO_SYSSPACE, imgp->interpreter_name, td);
 		args->fname = imgp->interpreter_name;
 		goto interpret;
@@ -1015,8 +1015,7 @@ exec_map_first_page(struct image_params *imgp)
 			vm_page_readahead_finish(ma[i]);
 	}
 	vm_page_lock(ma[0]);
-	vm_page_hold(ma[0]);
-	vm_page_activate(ma[0]);
+	vm_page_wire(ma[0]);
 	vm_page_unlock(ma[0]);
 	VM_OBJECT_WUNLOCK(object);
 
@@ -1036,7 +1035,7 @@ exec_unmap_first_page(struct image_params *imgp)
 		sf_buf_free(imgp->firstpage);
 		imgp->firstpage = NULL;
 		vm_page_lock(m);
-		vm_page_unhold(m);
+		vm_page_unwire(m, PQ_ACTIVE);
 		vm_page_unlock(m);
 	}
 }
@@ -1129,6 +1128,9 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	} else {
 		ssiz = maxssiz;
 	}
+	imgp->eff_stack_sz = lim_cur(curthread, RLIMIT_STACK);
+	if (ssiz < imgp->eff_stack_sz)
+		imgp->eff_stack_sz = ssiz;
 	stack_addr = sv->sv_usrstack - ssiz;
 	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz,
 	    obj != NULL && imgp->stack_prot != 0 ? imgp->stack_prot :
@@ -1616,6 +1618,9 @@ exec_copyout_strings(struct image_params *imgp)
 	destp = rounddown2(destp, sizeof(void *));
 
 	vectp = (char **)destp;
+	if (imgp->sysent->sv_stackgap != NULL)
+		imgp->sysent->sv_stackgap(imgp, (u_long *)&vectp);
+
 	if (imgp->auxargs) {
 		/*
 		 * Allocate room on the stack for the ELF auxargs

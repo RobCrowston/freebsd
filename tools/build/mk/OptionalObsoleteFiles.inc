@@ -437,7 +437,8 @@ OLD_FILES+=usr/share/man/man7/ldint.7.gz
 OLD_FILES+=usr/share/man/man7/binutils.7.gz
 .endif
 .endif
-.if !defined(WITH_PORT_BASE_BINUTILS)
+# powerpc64 still needs ld.bfd for 32-bit binaries/libraries
+.if !defined(WITH_PORT_BASE_BINUTILS) && ${TARGET_ARCH} != "powerpc64"
 .if ${MK_BINUTILS} == no || ${MK_LLD_IS_LD} == yes
 OLD_FILES+=usr/bin/ld.bfd
 .endif
@@ -3350,6 +3351,8 @@ OLD_FILES+=usr/share/man/man5/ipf.5.gz
 OLD_FILES+=usr/share/man/man5/ipf.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipf6.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipfilter.5.gz
+OLD_FILES+=usr/share/man/man8/ipmon.5.gz
+OLD_FILES+=usr/share/man/man5/ipmon.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipnat.5.gz
 OLD_FILES+=usr/share/man/man5/ipnat.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ippool.5.gz
@@ -8319,6 +8322,12 @@ OLD_LIBS+=usr/lib/libradius.so.4
 OLD_FILES+=usr/lib/libradius_p.a
 OLD_FILES+=usr/lib/pam_radius.so
 OLD_LIBS+=usr/lib/pam_radius.so.6
+OLD_FILES+=usr/lib32/libradius.a
+OLD_FILES+=usr/lib32/libradius.so
+OLD_LIBS+=usr/lib32/libradius.so.4
+OLD_FILES+=usr/lib32/libradius_p.a
+OLD_FILES+=usr/lib32/pam_radius.so
+OLD_LIBS+=usr/lib32/pam_radius.so.6
 OLD_FILES+=usr/include/radlib.h
 OLD_FILES+=usr/include/radlib_vs.h
 OLD_FILES+=usr/share/man/man3/libradius.3.gz

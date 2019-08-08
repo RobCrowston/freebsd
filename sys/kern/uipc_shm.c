@@ -57,6 +57,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/filio.h>
 #include <sys/fnv_hash.h>
 #include <sys/kernel.h>
+#include <sys/limits.h>
 #include <sys/uio.h>
 #include <sys/signal.h>
 #include <sys/jail.h>
@@ -207,11 +208,7 @@ uiomove_object_page(vm_object_t obj, size_t len, struct uio *uio)
 		vm_page_xunbusy(m);
 	}
 	vm_page_lock(m);
-	vm_page_hold(m);
-	if (vm_page_active(m))
-		vm_page_reference(m);
-	else
-		vm_page_activate(m);
+	vm_page_wire(m);
 	vm_page_unlock(m);
 	VM_OBJECT_WUNLOCK(obj);
 	error = uiomove_fromphys(&m, offset, tlen, uio);
@@ -222,7 +219,7 @@ uiomove_object_page(vm_object_t obj, size_t len, struct uio *uio)
 		VM_OBJECT_WUNLOCK(obj);
 	}
 	vm_page_lock(m);
-	vm_page_unhold(m);
+	vm_page_unwire(m, PQ_ACTIVE);
 	vm_page_unlock(m);
 
 	return (error);
@@ -732,7 +729,14 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 	fdp = td->td_proc->p_fd;
 	cmode = (mode & ~fdp->fd_cmask) & ACCESSPERMS;
 
-	error = falloc_caps(td, &fp, &fd, O_CLOEXEC, fcaps);
+	/*
+	 * shm_open(2) created shm should always have O_CLOEXEC set, as mandated
+	 * by POSIX.  We allow it to be unset here so that an in-kernel
+	 * interface may be written as a thin layer around shm, optionally not
+	 * setting CLOEXEC.  For shm_open(2), O_CLOEXEC is set unconditionally
+	 * in sys_shm_open() to keep this implementation compliant.
+	 */
+	error = falloc_caps(td, &fp, &fd, flags & O_CLOEXEC, fcaps);
 	if (error)
 		return (error);
 
@@ -847,7 +851,8 @@ int
 sys_shm_open(struct thread *td, struct shm_open_args *uap)
 {
 
-	return (kern_shm_open(td, uap->path, uap->flags, uap->mode, NULL));
+	return (kern_shm_open(td, uap->path, uap->flags | O_CLOEXEC, uap->mode,
+	    NULL));
 }
 
 int
