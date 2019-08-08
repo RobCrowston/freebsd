@@ -713,20 +713,21 @@ bcm_sdhci_write_dma(device_t dev, struct sdhci_slot *slot)
 static int
 bcm_sdhci_will_handle_transfer(device_t dev, struct sdhci_slot *slot)
 {
-	size_t left;
+	return (0);
+//	size_t left;
 
 	/*
 	 * Do not use DMA for transfers less than block size or with a length
 	 * that is not a multiple of four.
 	 */
-	left = min(BCM_DMA_BLOCK_SIZE,
+/*	left = min(BCM_DMA_BLOCK_SIZE,
 	    slot->curcmd->data->len - slot->offset);
 	if (left < BCM_DMA_BLOCK_SIZE)
 		return (0);
 	if (left & 0x03)
 		return (0);
 
-	return (1);
+	return (1);*/
 }
 
 static void
