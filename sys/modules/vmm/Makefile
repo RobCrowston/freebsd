@@ -17,6 +17,7 @@ CFLAGS+= -I${SRCTOP}/sys/amd64/vmm/amd
 SRCS+=	vmm.c		\
 	vmm_dev.c	\
 	vmm_host.c	\
+	vmm_host_stat.c \
 	vmm_instruction_emul.c	\
 	vmm_ioport.c	\
 	vmm_lapic.c	\

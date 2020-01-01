@@ -1647,7 +1647,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	int error, vcpuid;
 	struct vcpu *vcpu;
 	struct pcb *pcb;
-	uint64_t tscval;
+	uint64_t tscval_enter, tscval_delta;
 	struct vm_exit *vme;
 	bool retu, intr_disabled;
 	pmap_t pmap;
@@ -1675,7 +1675,7 @@ restart:
 	KASSERT(!CPU_ISSET(curcpu, &pmap->pm_active),
 	    ("vm_run: absurd pm_active"));
 
-	tscval = rdtsc();
+	tscval_enter = rdtsc();
 
 	pcb = PCPU_GET(curpcb);
 	set_pcb_flags(pcb, PCB_FULL_IRET);
@@ -1688,9 +1688,12 @@ restart:
 
 	save_guest_fpustate(vcpu);
 
-	vmm_stat_incr(vm, vcpuid, VCPU_TOTAL_RUNTIME, rdtsc() - tscval);
+	tscval_delta = rdtsc() - tscval_enter;
+	vmm_stat_incr(vm, vcpuid, VCPU_TOTAL_RUNTIME, tscval_delta);
 
 	critical_exit();
+
+	vmm_host_stat_cpu_ticks_incr(curcpu, tscval_delta);
 
 	if (error == 0) {
 		retu = false;
