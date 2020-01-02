@@ -28,10 +28,15 @@
  * $FreeBSD$
  */
 
-#ifndef _VMM_HOST_STAT_H
+#ifndef _VMM_HOST_STAT_H_
 #define _VMM_HOST_STAT_H_
 
 void vmm_host_stat_cpu_ticks_incr(int pcpu, uint64_t val);
+
+void vmm_host_stat_init(void);
+void vmm_host_stat_cleanup(void);
+
+SYSCTL_DECL(_hw_vmm);
 
 #endif /* _VMM_HOST_STAT_H_ */
 

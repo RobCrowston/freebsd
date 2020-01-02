@@ -77,6 +77,7 @@ __FBSDID("$FreeBSD$");
 #include "vlapic.h"
 #include "vpmtmr.h"
 #include "vrtc.h"
+#include "vmm_host_stat.h"
 #include "vmm_stat.h"
 #include "vmm_lapic.h"
 
@@ -365,6 +366,7 @@ vmm_handler(module_t mod, int what, void *arg)
 	switch (what) {
 	case MOD_LOAD:
 		vmmdev_init();
+		vmm_host_stat_init();
 		error = vmm_init();
 		if (error == 0)
 			vmm_initialized = 1;
@@ -383,6 +385,7 @@ vmm_handler(module_t mod, int what, void *arg)
 			 */
 			if (error)
 				vmm_initialized = 0;
+			vmm_host_stat_cleanup();
 		}
 		break;
 	default:

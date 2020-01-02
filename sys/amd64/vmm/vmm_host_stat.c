@@ -33,49 +33,67 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/smp.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 
 #include "vmm_host_stat.h"
 
 static MALLOC_DEFINE(M_VMM_HOST_STAT, "vmm host stats",
-    "measurements of the cost on the host of executing guests");
+    "vmm host statistics");
 
-static volatile uint64_t* counters_ptr = NULL;
+static uint64_t* guest_counters = NULL;
+static struct sysctl_ctx_list sysctl_ctx;
 
-static uint64_t* get_counters()
+static int sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS);
+
+SYSCTL_NODE(_hw_vmm, OID_AUTO, stat, CTLFLAG_RD, 0, "vmm host statistics");
+
+void vmm_host_stat_init()
 {
-	uint64_t* old_ptr, * new_ptr;
+	uint64_t *p;
 
-	old_ptr = (uint64_t *) atomic_load_acq_ptr((uint64_t *) &counters_ptr);
-	if (old_ptr)
-	    return old_ptr;
-
-	new_ptr = malloc(sizeof(uint64_t) * mp_ncpus, M_VMM_HOST_STAT,
+	p = malloc(sizeof(uint64_t) * mp_ncpus, M_VMM_HOST_STAT,
 	    M_WAITOK | M_ZERO);
+	atomic_set_rel_ptr((uint64_t *) &guest_counters, (uint64_t) p);
 
-	if (atomic_cmpset_rel_ptr((uint64_t *) &counters_ptr, 0,
-	    (uint64_t) new_ptr))
-	    return new_ptr;
+	sysctl_ctx_init(&sysctl_ctx);
+	SYSCTL_ADD_PROC(&sysctl_ctx, SYSCTL_STATIC_CHILDREN(_hw_vmm_stat),
+	    OID_AUTO, "guest_ticks", CTLTYPE_U64|CTLFLAG_RD|CTLFLAG_MPSAFE, 0,
+	    0, sysctl_hw_vmm_stat_guest_ticks, "QU",
+	    "Ticks each CPU has spent in guest execution");
+}
 
-	/* Competing thread allocated before we did. */
-	free(new_ptr, M_VMM_HOST_STAT);
+static uint64_t
+*get_guest_counters()
+{
+	uint64_t *p;
 
-	old_ptr = (uint64_t *) atomic_load_acq_ptr((uint64_t *) &counters_ptr);
-	KASSERT(old_ptr, "Not expecting cpu guest tick counter to be null.");
-	return old_ptr;
+	p = (uint64_t *) atomic_load_acq_ptr((uint64_t *) &guest_counters);
+	KASSERT(p, "vmm: expecting guest counters to be initialized");
+	return p;
+}
+
+void vmm_host_stat_cleanup()
+{
+	uint64_t *p;
+
+	/* Destroy the sysctl context before we free the counters. */
+	sysctl_ctx_free(&sysctl_ctx);
+
+	p = get_guest_counters();
+	free(p, M_VMM_HOST_STAT);
 }
 
 void vmm_host_stat_cpu_ticks_incr(int pcpu, uint64_t val)
 {
-	uint64_t volatile *counters;
+	uint64_t volatile *p;
 
 	KASSERT(pcpu < mp_ncpus, "Invalid CPU ID for guest tick counter.");
 
-	counters = get_counters();
-	atomic_add_64((counters + pcpu), val);
+	p = get_guest_counters();
+	atomic_add_64((p + pcpu), val);
 }
 
 static int
@@ -83,25 +101,18 @@ sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS)
 {
 	int error;
 	int cpu;
-	uint64_t volatile *counters;
+	uint64_t volatile *p;
 	uint64_t ticks;
 
 	if (!req->oldptr)
 	    return SYSCTL_OUT(req, 0, sizeof(uint64_t) * mp_ncpus);
 
-	counters = get_counters();
+	p = get_guest_counters();
 	for (error = 0, cpu = 0; error == 0 && cpu < mp_ncpus; cpu++)
 	{
-		ticks = atomic_load_64(counters + cpu);
+		ticks = atomic_load_64(p + cpu);
 		error = SYSCTL_OUT(req, &ticks, sizeof(uint64_t));
 	}
 	return error;
-
 }
-
-SYSCTL_DECL(_hw_vmm);
-SYSCTL_NODE(_hw_vmm, OID_AUTO, stat, CTLFLAG_RD, 0, "vmm host statistics");
-SYSCTL_PROC(_hw_vmm_stat, OID_AUTO, guest_ticks,
-    CTLTYPE_U64|CTLFLAG_RD|CTLFLAG_MPSAFE, 0, 0, sysctl_hw_vmm_stat_guest_ticks,
-    "LU", "Ticks each CPU has spent in guest execution");
 
