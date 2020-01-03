@@ -46,7 +46,7 @@ __FBSDID("$FreeBSD$");
 static MALLOC_DEFINE(M_VMM_HOST_STAT, "vmm host stats",
     "vmm host statistics");
 
-static uint64_t* guest_counters = NULL;
+static uint64_t *guest_counters;
 static struct sysctl_ctx_list sysctl_ctx;
 static unsigned pr_allow_flag;
 
@@ -56,11 +56,9 @@ SYSCTL_NODE(_hw_vmm, OID_AUTO, stat, CTLFLAG_RD, 0, "vmm host statistics");
 
 void vmm_host_stat_init()
 {
-	uint64_t *p;
 
-	p = malloc(sizeof(uint64_t) * mp_ncpus, M_VMM_HOST_STAT,
+	guest_counters = malloc(sizeof(uint64_t) * mp_ncpus, M_VMM_HOST_STAT,
 	    M_WAITOK | M_ZERO);
-	atomic_set_rel_ptr((uint64_t *) &guest_counters, (uint64_t) p);
 
 	sysctl_ctx_init(&sysctl_ctx);
 	SYSCTL_ADD_PROC(&sysctl_ctx, SYSCTL_STATIC_CHILDREN(_hw_vmm_stat),
@@ -72,35 +70,21 @@ void vmm_host_stat_init()
 	    "Allow jailed processes to read hw.vmm.stat.");
 }
 
-static uint64_t
-*get_guest_counters()
-{
-	uint64_t *p;
-
-	p = (uint64_t *) atomic_load_acq_ptr((uint64_t *) &guest_counters);
-	KASSERT(p, "vmm: expecting guest counters to be initialized");
-	return p;
-}
-
 void vmm_host_stat_cleanup()
 {
-	uint64_t *p;
 
 	/* Destroy the sysctl context before we free the counters. */
 	sysctl_ctx_free(&sysctl_ctx);
 
-	p = get_guest_counters();
-	free(p, M_VMM_HOST_STAT);
+	free(guest_counters, M_VMM_HOST_STAT);
 }
 
 void vmm_host_stat_cpu_ticks_incr(int pcpu, uint64_t val)
 {
-	uint64_t volatile *p;
 
 	KASSERT(pcpu < mp_ncpus, "Invalid CPU ID for guest tick counter.");
 
-	p = get_guest_counters();
-	atomic_add_64((p + pcpu), val);
+	atomic_add_64((guest_counters + pcpu), val);
 }
 
 static int
@@ -118,7 +102,6 @@ sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS)
 {
 	int error;
 	int cpu;
-	uint64_t volatile *p;
 	uint64_t ticks;
 
 	error = check_sysctl_priv(req->td);
@@ -128,9 +111,8 @@ sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS)
 	if (!req->oldptr)
 	    return SYSCTL_OUT(req, 0, sizeof(uint64_t) * mp_ncpus);
 
-	p = get_guest_counters();
 	for (error = 0, cpu = 0; error == 0 && cpu < mp_ncpus; cpu++) {
-		ticks = atomic_load_64(p + cpu);
+		ticks = atomic_load_64(guest_counters + cpu);
 		error = SYSCTL_OUT(req, &ticks, sizeof(uint64_t));
 	}
 	return error;
