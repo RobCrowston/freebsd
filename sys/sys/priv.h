@@ -509,9 +509,14 @@
 #define	PRIV_KMEM_WRITE		681	/* Open mem/kmem for writing. */
 
 /*
+ * vmm(4) privileges.
+ */
+#define	PRIV_VMM_HOST_STAT	690	/* Read the sysctl hw.vmm.stat. */
+
+/*
  * Track end of privilege list.
  */
-#define	_PRIV_HIGHEST		682
+#define	_PRIV_HIGHEST		691
 
 /*
  * Validate that a named privilege is known by the privilege system.  Invalid

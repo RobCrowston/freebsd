@@ -37,6 +37,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/smp.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
+#include <sys/jail.h>
+#include <sys/priv.h>
+#include <sys/proc.h>
 
 #include "vmm_host_stat.h"
 
@@ -45,6 +48,7 @@ static MALLOC_DEFINE(M_VMM_HOST_STAT, "vmm host stats",
 
 static uint64_t* guest_counters = NULL;
 static struct sysctl_ctx_list sysctl_ctx;
+static unsigned pr_allow_flag;
 
 static int sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS);
 
@@ -63,6 +67,9 @@ void vmm_host_stat_init()
 	    OID_AUTO, "guest_ticks", CTLTYPE_U64|CTLFLAG_RD|CTLFLAG_MPSAFE, 0,
 	    0, sysctl_hw_vmm_stat_guest_ticks, "QU",
 	    "Ticks each CPU has spent in guest execution");
+
+	pr_allow_flag = prison_add_allow(NULL, "vmm_host_stat", NULL,
+	    "Allow jailed processes to read hw.vmm.stat.");
 }
 
 static uint64_t
@@ -97,6 +104,16 @@ void vmm_host_stat_cpu_ticks_incr(int pcpu, uint64_t val)
 }
 
 static int
+check_sysctl_priv(struct thread *td)
+{
+
+	if (jailed(td->td_ucred) && !prison_allow(td->td_ucred, pr_allow_flag))
+	    return (EPERM);
+
+	return (priv_check(td, PRIV_VMM_HOST_STAT));
+}
+
+static int
 sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS)
 {
 	int error;
@@ -104,12 +121,15 @@ sysctl_hw_vmm_stat_guest_ticks(SYSCTL_HANDLER_ARGS)
 	uint64_t volatile *p;
 	uint64_t ticks;
 
+	error = check_sysctl_priv(req->td);
+	if (error)
+	    return error;
+
 	if (!req->oldptr)
 	    return SYSCTL_OUT(req, 0, sizeof(uint64_t) * mp_ncpus);
 
 	p = get_guest_counters();
-	for (error = 0, cpu = 0; error == 0 && cpu < mp_ncpus; cpu++)
-	{
+	for (error = 0, cpu = 0; error == 0 && cpu < mp_ncpus; cpu++) {
 		ticks = atomic_load_64(p + cpu);
 		error = SYSCTL_OUT(req, &ticks, sizeof(uint64_t));
 	}

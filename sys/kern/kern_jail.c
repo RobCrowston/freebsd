@@ -3367,6 +3367,13 @@ prison_priv_check(struct ucred *cred, int priv)
 			return (0);
 		return (EPERM);
 
+	case PRIV_VMM_HOST_STAT:
+		/*
+		 * Allow root in a jail to read the vmm host statistics sysctl.
+		 * This privilege can be denied by vmm_host_stat.c.
+		 */
+		return (0);
+
 	default:
 		/*
 		 * In all remaining cases, deny the privilege request.  This
