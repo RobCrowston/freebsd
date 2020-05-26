@@ -235,7 +235,7 @@ generic_pcie_write_ivar(device_t dev, device_t child, int index,
 	return (ENOENT);
 }
 
-static struct rman *
+struct rman *
 generic_pcie_rman(struct generic_pcie_core_softc *sc, int type)
 {
 
