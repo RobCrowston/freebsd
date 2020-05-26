@@ -120,9 +120,9 @@ generic_pcie_fdt_probe(device_t dev)
 }
 
 int
-pci_host_generic_attach(device_t dev)
+pci_host_generic_setup_fdt(device_t dev,
+    struct generic_pcie_core_softc *base_sc)
 {
-	struct generic_pcie_fdt_softc *sc;
 	uint64_t phys_base;
 	uint64_t pci_base;
 	uint64_t size;
@@ -130,12 +130,10 @@ pci_host_generic_attach(device_t dev)
 	int error;
 	int tuple;
 
-	sc = device_get_softc(dev);
-
 	/* Retrieve 'ranges' property from FDT */
 	if (bootverbose)
-		device_printf(dev, "parsing FDT for ECAM%d:\n", sc->base.ecam);
-	if (parse_pci_mem_ranges(dev, &sc->base))
+		device_printf(dev, "parsing FDT for ECAM%d:\n", base_sc->ecam);
+	if (parse_pci_mem_ranges(dev, base_sc))
 		return (ENXIO);
 
 	/* Attach OFW bus */
@@ -143,42 +141,59 @@ pci_host_generic_attach(device_t dev)
 		return (ENXIO);
 
 	node = ofw_bus_get_node(dev);
-	if (sc->base.coherent == 0) {
-		sc->base.coherent = OF_hasprop(node, "dma-coherent");
+	if (base_sc->coherent == 0) {
+		base_sc->coherent = OF_hasprop(node, "dma-coherent");
 	}
 	if (bootverbose)
 		device_printf(dev, "Bus is%s cache-coherent\n",
-		    sc->base.coherent ? "" : " not");
+		    base_sc->coherent ? "" : " not");
 
 	/* TODO parse FDT bus ranges */
-	sc->base.bus_start = 0;
-	sc->base.bus_end = 0xFF;
+	base_sc->bus_start = 0;
+	base_sc->bus_end = 0xFF;
 	error = pci_host_generic_core_attach(dev);
 	if (error != 0)
 		return (error);
 
 	for (tuple = 0; tuple < MAX_RANGES_TUPLES; tuple++) {
-		phys_base = sc->base.ranges[tuple].phys_base;
-		pci_base = sc->base.ranges[tuple].pci_base;
-		size = sc->base.ranges[tuple].size;
+		phys_base = base_sc->ranges[tuple].phys_base;
+		pci_base = base_sc->ranges[tuple].pci_base;
+		size = base_sc->ranges[tuple].size;
 		if (phys_base == 0 || size == 0)
 			continue; /* empty range element */
-		if (sc->base.ranges[tuple].flags & FLAG_MEM) {
-			error = rman_manage_region(&sc->base.mem_rman,
+		if (base_sc->ranges[tuple].flags & FLAG_MEM) {
+			error = rman_manage_region(&base_sc->mem_rman,
 			    pci_base, pci_base + size - 1);
-		} else if (sc->base.ranges[tuple].flags & FLAG_IO) {
-			error = rman_manage_region(&sc->base.io_rman,
+		} else if (base_sc->ranges[tuple].flags & FLAG_IO) {
+			error = rman_manage_region(&base_sc->io_rman,
 			    pci_base, pci_base + size - 1);
 		} else
 			continue;
 		if (error) {
 			device_printf(dev, "rman_manage_region() failed."
 						"error = %d\n", error);
-			rman_fini(&sc->base.mem_rman);
+			rman_fini(&base_sc->mem_rman);
 			return (error);
 		}
 	}
 
+	return (0);
+}
+
+int
+pci_host_generic_attach(device_t dev)
+{
+	struct generic_pcie_fdt_softc *sc;
+	phandle_t node;
+	int error;
+
+	sc = device_get_softc(dev);
+
+	error = pci_host_generic_setup_fdt(dev, &sc->base);
+	if(error)
+		return(error);
+
+	node = ofw_bus_get_node(dev);
 	ofw_bus_setup_iinfo(node, &sc->pci_iinfo, sizeof(cell_t));
 
 	device_add_child(dev, "pci", -1);

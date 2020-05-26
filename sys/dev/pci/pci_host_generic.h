@@ -88,5 +88,6 @@ struct resource *pci_host_generic_core_alloc_resource(device_t, device_t, int,
     int *, rman_res_t, rman_res_t, rman_res_t, u_int);
 int pci_host_generic_core_release_resource(device_t, device_t, int, int,
     struct resource *);
+struct rman *generic_pcie_rman(struct generic_pcie_core_softc *, int);
 
 #endif /* __PCI_HOST_GENERIC_H_ */
