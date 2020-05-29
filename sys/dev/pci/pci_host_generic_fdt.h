@@ -46,5 +46,6 @@ struct resource *pci_host_generic_alloc_resource(device_t,
 int pci_host_generic_setup_fdt(device_t, struct generic_pcie_core_softc *);
 int pci_host_generic_attach(device_t);
 int generic_pcie_get_id(device_t, device_t, enum pci_id_type, uintptr_t *);
+int generic_pcie_fdt_route_interrupt_for_iinfo(device_t, struct ofw_bus_iinfo *, int);
 
 #endif /* __PCI_HOST_GENERIC_FDT_H_ */

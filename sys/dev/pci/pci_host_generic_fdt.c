@@ -279,16 +279,15 @@ parse_pci_mem_ranges(device_t dev, struct generic_pcie_core_softc *sc)
 	return (0);
 }
 
-static int
-generic_pcie_fdt_route_interrupt(device_t bus, device_t dev, int pin)
+int
+generic_pcie_fdt_route_interrupt_for_iinfo(device_t dev,
+    struct ofw_bus_iinfo *iinfo, int pin)
 {
-	struct generic_pcie_fdt_softc *sc;
 	struct ofw_pci_register reg;
 	uint32_t pintr, mintr[4];
 	phandle_t iparent;
 	int intrcells;
 
-	sc = device_get_softc(bus);
 	pintr = pin;
 
 	bzero(&reg, sizeof(reg));
@@ -296,17 +295,31 @@ generic_pcie_fdt_route_interrupt(device_t bus, device_t dev, int pin)
 	    (pci_get_slot(dev) << OFW_PCI_PHYS_HI_DEVICESHIFT) |
 	    (pci_get_function(dev) << OFW_PCI_PHYS_HI_FUNCTIONSHIFT);
 
-	intrcells = ofw_bus_lookup_imap(ofw_bus_get_node(dev),
-	    &sc->pci_iinfo, &reg, sizeof(reg), &pintr, sizeof(pintr),
-	    mintr, sizeof(mintr), &iparent);
+	intrcells = ofw_bus_lookup_imap(ofw_bus_get_node(dev), iinfo, &reg,
+	    sizeof(reg), &pintr, sizeof(pintr), mintr, sizeof(mintr), &iparent);
 	if (intrcells) {
 		pintr = ofw_bus_map_intr(dev, iparent, intrcells, mintr);
 		return (pintr);
 	}
 
-	device_printf(bus, "could not route pin %d for device %d.%d\n",
-	    pin, pci_get_slot(dev), pci_get_function(dev));
 	return (PCI_INVALID_IRQ);
+}
+
+static int
+generic_pcie_fdt_route_interrupt(device_t bus, device_t dev, int pin)
+{
+	struct generic_pcie_fdt_softc *sc;
+	struct ofw_bus_iinfo *iinfo;
+	int irq;
+
+	sc = device_get_softc(bus);
+	iinfo = &sc->pci_iinfo;
+
+	irq = generic_pcie_fdt_route_interrupt_for_iinfo(dev, iinfo, pin);
+	if (irq == PCI_INVALID_IRQ)
+		device_printf(bus, "could not route pin %d for device %d.%d\n",
+		    pin, pci_get_slot(dev), pci_get_function(dev));
+	return (irq);
 }
 
 static int

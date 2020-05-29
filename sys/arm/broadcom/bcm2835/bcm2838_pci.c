@@ -107,13 +107,10 @@ struct bcm_pcib_irqsrc {
 	bool			allocated;
 };
 
-/* In generic_pcie_fdt_route_interrupt() our softc is cast to a
- * generic_pcie_fdt_softc to access pci_iinfo, so keep the first two members
- * below in order until this is refactored. */
 struct bcm_pcib_softc {
 	struct generic_pcie_core_softc	base;
-	struct ofw_bus_iinfo		pci_iinfo;
 	device_t			dev;
+	struct ofw_bus_iinfo		pci_iinfo;
 	struct mtx			msi_mtx;
 	struct resource 		*msi_irq_res;
 	void				*msi_intr_cookie;
@@ -230,7 +227,8 @@ bcm_pcib_check_window(device_t dev)
 		error = ENXIO;
 	}
 
-	/* Only first range matters. */
+	/* The controller can actually handle three distinct ranges, but we
+	 * only implement support for one. */
 	for (i = 1; (bootverbose || error) && i < MAX_RANGES_TUPLES; ++i) {
 		if (sc->base.ranges[i].size > 0)
 			device_printf(dev,
@@ -429,7 +427,7 @@ bcm_pcib_read_config(device_t dev, u_int bus, u_int slot,
 
 	sc = device_get_softc(dev);
 	if (!bcm_pcib_is_valid_quad(sc, bus, slot, func, reg))
-	    return (~0U);
+		return (~0U);
 
 	offset = bcm_get_offset_and_prepare_config(sc, bus, slot, func, reg);
 
@@ -464,7 +462,7 @@ bcm_pcib_write_config(device_t dev, u_int bus, u_int slot,
 
 	sc = device_get_softc(dev);
 	if (!bcm_pcib_is_valid_quad(sc, bus, slot, func, reg))
-	    return;
+		return;
 
 	offset = bcm_get_offset_and_prepare_config(sc, bus, slot, func, reg);
 
@@ -484,6 +482,23 @@ bcm_pcib_write_config(device_t dev, u_int bus, u_int slot,
 	default:
 		return;
 	}
+}
+
+static int
+bcm_pcib_route_interrupt(device_t dev, device_t child, int pin)
+{
+	struct bcm_pcib_softc *sc;
+	struct ofw_bus_iinfo *iinfo;
+	int irq;
+
+	sc = device_get_softc(dev);
+	iinfo = &sc->pci_iinfo;
+
+	irq = generic_pcie_fdt_route_interrupt_for_iinfo(child, iinfo, pin);
+	if (irq == PCI_INVALID_IRQ)
+		device_printf(dev, "could not route pin %d for device %d.%d\n",
+		    pin, pci_get_slot(dev), pci_get_function(dev));
+	return (irq);
 }
 
 static void
@@ -508,9 +523,8 @@ bcm_pcib_msi_intr_process(struct bcm_pcib_softc *sc, uint32_t interrupt_bitmap,
 			device_printf(sc->dev,
 			    "note: unexpected interrupt triggered.\n");
 
-		/* Done with this interrupt. (We'll refresh from the controller
-		 * in the outer loop after the first pass.) */
-		interrupt_bitmap &= ~(1 << irq);
+		/* Done with this interrupt. */
+		interrupt_bitmap = interrupt_bitmap & ~(1 << irq);
 	}
 }
 
@@ -521,7 +535,7 @@ bcm_pcib_msi_intr(void *arg)
 	struct trapframe *tf;
 	uint32_t interrupt_bitmap;
 
-	sc = (struct bcm_pcib_softc *)arg;
+	sc = (struct bcm_pcib_softc *) arg;
 	tf = curthread->td_intr_frame;
 
 	while ((interrupt_bitmap = bcm_pcib_read_reg(sc, REG_MSI_RAISED)))
@@ -653,14 +667,14 @@ bcm_pcib_msi_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
-	if (intr_msi_register(dev, xref) != 0)
+	error = intr_msi_register(dev, xref);
+	if (error)
 		return (ENXIO);
 
 	mtx_init(&sc->msi_mtx, "bcm_pcib: msi_mtx", NULL, MTX_DEF);
 
 	bcm_pcib_set_reg(sc, REG_MSI_MASK_CLR, 0xffffffff);
-	bcm_pcib_set_reg(sc, REG_MSI_ADDR_LOW,  (sc->msi_addr & 0xffffffff) |
-	    0x1);
+	bcm_pcib_set_reg(sc, REG_MSI_ADDR_LOW, (sc->msi_addr & 0xffffffff) | 1);
 	bcm_pcib_set_reg(sc, REG_MSI_ADDR_HIGH, (sc->msi_addr >> 32));
 	bcm_pcib_set_reg(sc, REG_MSI_CONFIG_MAGIC, 0xffe06540);
 
@@ -697,7 +711,9 @@ bcm_pcib_attach(device_t dev)
 	/* Set PCI->CPU memory window. This encodes the inbound window showing
 	 * up to 4 GiB of system memory to the controller, with zero offset.
 	 * Thus, from the perspective of a device on the PCI-E bus, there is a
-	 * 1:1 map from PCI-E bus addresses to system memory addresses. */
+	 * 1:1 map from PCI-E bus addresses to system memory addresses.
+	 * However, a hardware limitation means that the controller can only
+	 * perform DMA on the lower 3 GiB of system memory. */
 	bcm_pcib_set_reg(sc, REG_BRIDGE_MEM_WINDOW_LO, 0x11);
 	bcm_pcib_set_reg(sc, REG_BRIDGE_MEM_WINDOW_HI, 0);
 	bcm_pcib_set_reg(sc, REG_BRIDGE_GISB_WINDOW, 0);
@@ -784,6 +800,7 @@ static device_method_t bcm_pcib_methods[] = {
 	/* PCIB interface. */
 	DEVMETHOD(pcib_read_config,		bcm_pcib_read_config),
 	DEVMETHOD(pcib_write_config,		bcm_pcib_write_config),
+	DEVMETHOD(pcib_route_interrupt,		bcm_pcib_route_interrupt),
 
 	/* MSI interface. */
 	DEVMETHOD(msi_alloc_msi,		bcm_pcib_alloc_msi),
