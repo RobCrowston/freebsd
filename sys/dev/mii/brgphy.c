@@ -115,6 +115,7 @@ static void	brgphy_fixup_ber_bug(struct mii_softc *);
 static void	brgphy_fixup_crc_bug(struct mii_softc *);
 static void	brgphy_fixup_jitter_bug(struct mii_softc *);
 static void	brgphy_ethernet_wirespeed(struct mii_softc *);
+static void	brgphy_bcm54xx_clock_delay(struct mii_softc *);
 static void	brgphy_jumbo_settings(struct mii_softc *, u_long);
 
 static const struct mii_phydesc brgphys[] = {
@@ -415,6 +416,12 @@ brgphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 				break;
 			}
 			break;
+		case MII_OUI_BROADCOM4:
+			switch (sc->mii_mpd_model) {
+			case MII_MODEL_BROADCOM4_BCM54213PE:
+				brgphy_bcm54xx_clock_delay(sc);
+				break;
+			}
 		}
 	}
 	mii_phy_update(sc, cmd);
@@ -869,6 +876,10 @@ brgphy_bcm54xx_clock_delay(struct mii_softc *sc)
 {
 	uint16_t val;
 
+	if (!(sc->mii_flags & (MIIF_RXID | MIIF_TXID)))
+		/* Adjusting the clocks in rgmii mode causes packet losses. */
+		return;
+
 	PHY_WRITE(sc, BRGPHY_MII_AUXCTL, BRGPHY_AUXCTL_SHADOW_MISC |
 	    BRGPHY_AUXCTL_SHADOW_MISC << BRGPHY_AUXCTL_MISC_READ_SHIFT);
 	val = PHY_READ(sc, BRGPHY_MII_AUXCTL);
@@ -975,14 +986,7 @@ brgphy_reset(struct mii_softc *sc)
 		}
 		break;
 	case MII_OUI_BROADCOM4:
-		switch (sc->mii_mpd_model) {
-		case MII_MODEL_BROADCOM4_BCM54213PE:
-			brgphy_bcm54xx_clock_delay(sc);
-			break;
-		case MII_MODEL_BROADCOM4_BCM5725C:
-			return;
-		}
-		break;
+		return;
 	}
 
 	ifp = sc->mii_pdata->mii_ifp;
